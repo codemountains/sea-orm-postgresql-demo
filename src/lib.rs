@@ -3,12 +3,14 @@ mod entities;
 use std::env;
 use std::time::Duration;
 use dotenv::dotenv;
-use sea_orm::{ActiveModelTrait, ActiveValue, ConnectOptions, Database, DbConn, DbErr, DeleteResult, EntityTrait};
+use sea_orm::{ActiveModelTrait, ActiveValue, ConnectOptions, Database, DbConn, DbErr, DeleteResult, EntityTrait, QueryFilter};
 use sea_orm::ActiveValue::Set;
 use crate::entities::{todos, users};
 use crate::entities::prelude::Todos;
+use sea_orm::ColumnTrait;
 
 pub async  fn check_connection() -> Result<(), DbErr> {
+    // DB接続のためのコネクションを生成
     let db = establish_connection().await?;
 
     assert!(db.ping().await.is_ok());
@@ -18,17 +20,19 @@ pub async  fn check_connection() -> Result<(), DbErr> {
 }
 
 pub async fn insert_user(db: &DbConn) -> Result<users::Model, DbErr> {
+    // ユーザーアクティブモデルを生成
     let user = users::ActiveModel {
         id: ActiveValue::NotSet,
         name: Set("John Smith".to_string())
     };
 
+    // insert
     let user: users::Model = user.insert(db).await?;
 
     Ok(user)
 }
 
-pub async fn insert_todo(db: &DbConn, user: &users::Model) -> Result<todos::Model, DbErr> {
+pub async fn insert_todos(db: &DbConn, user: &users::Model) -> Result<todos::Model, DbErr> {
     let todo = todos::ActiveModel {
         id: ActiveValue::NotSet,
         title: Set("Test".to_string()),
@@ -37,32 +41,59 @@ pub async fn insert_todo(db: &DbConn, user: &users::Model) -> Result<todos::Mode
         created_by: Set(user.id),
         updated_by:  Set(user.id),
     };
-
     let todo: todos::Model = todo.insert(db).await?;
+
+    let todo2 = todos::ActiveModel {
+        id: ActiveValue::NotSet,
+        title: Set("Test2".to_string()),
+        description: Set("This todo is a dummy.".to_string()),
+        done: Default::default(),
+        created_by: Set(user.id),
+        updated_by:  Set(user.id),
+    };
+    let _ = todo2.insert(db).await?;
+
+    let todo3 = todos::ActiveModel {
+        id: ActiveValue::NotSet,
+        title: Set("Test3".to_string()),
+        description: Set("test data.".to_string()),
+        done: Set(true),
+        created_by: Set(user.id),
+        updated_by:  Set(user.id),
+    };
+    let _ = todo3.insert(db).await?;
 
     Ok(todo)
 }
 
 pub async fn select_todo(db: &DbConn, todo: todos::Model) -> Result<Option<todos::Model>, DbErr> {
+    // ID 指定の検索
     let selected: Option<todos::Model> = Todos::find_by_id(todo.id).one(db).await?;
     Ok(selected)
 }
 
-// pub async fn select_todos_by_user(db: &DbConn, user: &users::Model) -> Result<Vec<todos::Model>, DbErr> {
-//     let selected: Vec<todos::Model> = user.find_related(Todos).all(db).await?;
-//     Ok(selected)
-// }
+pub async fn select_todos_by_user(db: &DbConn, user: &users::Model) -> Result<Vec<todos::Model>, DbErr> {
+    let selected: Vec<todos::Model> = Todos::find().filter(todos::Column::CreatedBy.eq(user.id)).all(db).await?;
+    Ok(selected)
+}
 
 pub async fn update_todo(db: &DbConn, todo: todos::Model) -> Result<todos::Model, DbErr> {
+    // アクティブモデルを into で生成
     let mut target: todos::ActiveModel = todo.into();
+
+    // 値を書き換える
     target.done = Set(true);
 
+    // update
     let todo: todos::Model = target.update(db).await?;
     Ok(todo)
 }
 
 pub async fn delete_todo(db: &DbConn, todo: todos::Model) -> Result<(), DbErr> {
+    // アクティブモデルを into で生成
     let target: todos::ActiveModel = todo.into();
+
+    // delete
     let _: DeleteResult = target.delete(db).await?;
     Ok(())
 }
@@ -82,6 +113,7 @@ pub async fn establish_connection() -> Result<DbConn, DbErr> {
         .sqlx_logging(true)
         .sqlx_logging_level(log::LevelFilter::Info);
 
+    //  DB接続のためのコネクションを生成
     Database::connect(opt).await
 }
 
@@ -97,18 +129,24 @@ mod tests {
 
     #[tokio::test]
     async fn it_works() {
+        env_logger::builder()
+            .filter_level(log::LevelFilter::Debug)
+            .is_test(true)
+            .init();
+
         let db = establish_connection().await.expect("connection error!");
 
         match insert_user(&db).await {
             Ok(user) => {
                 println!("{:?}", user);
 
-                match insert_todo(&db, &user).await {
+                match insert_todos(&db, &user).await {
                     Ok(todo) => {
                         println!("{:?}", todo);
 
-                        // not working
-                        // let result = select_todos_by_user(&db, &user).await;
+                        //
+                        let result = select_todos_by_user(&db, &user).await;
+                        println!("{:?}", result);
 
                         match select_todo(&db, todo).await {
                             Ok(result) => {

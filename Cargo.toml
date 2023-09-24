@@ -10,3 +10,4 @@ sea-orm = { version = "0.12.2", features = [ "sqlx-postgres", "runtime-tokio-rus
 tokio = { version = "1.32.0", features = ["full"] }
 log = "0.4.20"
 dotenv = "0.15.0"
+env_logger = "0.10.0"
