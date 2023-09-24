@@ -14,9 +14,3 @@ pub struct Model {
 pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
-
-// impl Related<super::todos::Entity> for Entity {
-//     fn to() -> RelationDef {
-//         super::todos::Relation::Users1.def()
-//     }
-// }
